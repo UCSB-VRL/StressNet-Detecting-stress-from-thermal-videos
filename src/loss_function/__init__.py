@@ -1,0 +1,1 @@
+#initialize loss functions here
