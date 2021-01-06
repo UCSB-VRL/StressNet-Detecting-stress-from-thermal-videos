@@ -15,7 +15,7 @@ This repository includes:
 * Training/Test code for both ISTI signal predictor and Stress Detector
 * Example of training on your own dataset
 
-The whole repo is structure follows the same style as written in the paper for easy reproducibility and easy to extend this work. If you use this research, please consider citing our paper (bibtex below)
+The whole repo structure follows the same style as written in the paper for easy reproducibility and easy to extend this work. If you use this research, please consider citing our paper (bibtex below)
 
 ## Citing
 If this work is useful to you, please consider citing our paper:
