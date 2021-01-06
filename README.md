@@ -6,7 +6,7 @@ StressNet introduces a fast and novel algorithm of obtaining physiological signa
 
 Official repository for our [**WACV 2021**](https://openaccess.thecvf.com/content/WACV2021/html/Kumar_StressNet_Detecting_Stress_in_Thermal_Videos_WACV_2021_paper.html) paper
 
-<img src="overview.gif" width="700">
+<img src="figures/overview.gif" width="700">
 
 This repository includes:
 * Source code for ISTI signal predictor with baseline model Resnet50
