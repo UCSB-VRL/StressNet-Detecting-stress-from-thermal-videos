@@ -41,13 +41,13 @@ If this work is useful to you, please consider citing our paper:
 pip install -r requirements.txt
 ```
 ### ISTI detector
-Running the ISTI detector code is quite simple. Follow the [REAMDME.md](link here)
+Running the ISTI detector code is at [isit_predictor](https://github.com/UCSB-VRL/StressNet-Detecting-stress-from-thermal-videos/tree/main/isti_predictor). Its output is a numpy array of isti signal. Follow the [REAMDME.md](https://github.com/UCSB-VRL/StressNet-Detecting-stress-from-thermal-videos/blob/main/isti_predictor/README.md) to run it.
 ```
-src/README.md
+isti_predictor/README.md
 ```
 
 ### Stress detector from predicted ISTI signal
-For detecting stress from thermal video, the ISTI detector needs to be run first. Then the predicted ISTI signal is used to predict the probability of stress experienced by an individual. Follow the [README.md](link here)
+For detecting stress from thermal video, the ISTI detector needs to be run first. Then the predicted ISTI signal is used to predict the probability of stress experienced by an individual. Source code is at [stress_predictor](https://github.com/UCSB-VRL/StressNet-Detecting-stress-from-thermal-videos/tree/main/stress_predictor).Follow the [README.md](https://github.com/UCSB-VRL/StressNet-Detecting-stress-from-thermal-videos/blob/main/stress_predictor/README.md)
 ```
-link here
+stress_predictor/README.md
 ```
