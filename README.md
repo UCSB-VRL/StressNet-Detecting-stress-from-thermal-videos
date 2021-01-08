@@ -47,7 +47,7 @@ isti_predictor/README.md
 ```
 
 ### Stress detector from predicted ISTI signal
-For detecting stress from thermal video, the ISTI detector needs to be run first. Then the predicted ISTI signal is used to predict the probability of stress experienced by an individual. Source code is at [stress_predictor](https://github.com/UCSB-VRL/StressNet-Detecting-stress-from-thermal-videos/tree/main/stress_predictor).Follow the [README.md](https://github.com/UCSB-VRL/StressNet-Detecting-stress-from-thermal-videos/blob/main/stress_predictor/README.md)
+For detecting stress from thermal video, the ISTI detector needs to be run first. Then the predicted ISTI signal is used to predict the probability of stress experienced by an individual. Source code is at [stress_predictor](https://github.com/UCSB-VRL/StressNet-Detecting-stress-from-thermal-videos/tree/main/stress_predictor).Follow the [README.md](https://github.com/UCSB-VRL/StressNet-Detecting-stress-from-thermal-videos/blob/main/stress_predictor/README.md) to run it.
 ```
 stress_predictor/README.md
 ```
