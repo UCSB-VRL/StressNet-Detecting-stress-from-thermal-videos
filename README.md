@@ -1,4 +1,4 @@
-## StressNet-Detecting-stress-in-thermal-videos
+## StressNet: Detecting stress in thermal videos 
 StressNet introduces a fast and novel algorithm of obtaining physiological signals and classify stress states from thermal videos. This repo contains ground-up write of all the components of StressNet. It is written in Python and powered by the pytorch deep learning framework.
 
 ### [**StressNet: Detecting Stress in Thermal Videos**](https://arxiv.org/pdf/2011.09540.pdf)
