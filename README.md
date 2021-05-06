@@ -15,6 +15,10 @@ This repository includes:
 * Training/Test code for both ISTI signal predictor and Stress Detector
 * Example of training on your own dataset
 
+![supported versions](https://img.shields.io/badge/python-(3.5--3.8)-brightgreen/?style=flat&logo=python&color=green)
+![Library](https://img.shields.io/badge/library-PyTorch-blue/?style=flat&logo=pytorch&color=informational)
+![GitHub license](https://img.shields.io/cocoapods/l/AFNetworking)
+
 The whole repo structure follows the same style as written in the paper for easy reproducibility and easy to extend this work. If you use this research, please consider citing our paper (bibtex below)
 
 ## Citing
