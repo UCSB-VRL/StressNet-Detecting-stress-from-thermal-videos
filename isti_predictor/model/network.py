@@ -24,6 +24,7 @@ class CNN(nn.Module):
 	def __init__(self):
 		super().__init__()
 		#loading blocks of ResNet
+		resnet_model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
 		blocks     = list(resnet_model.children())[0:8]
 		self.convs = nn.Sequential(*blocks)	
 		self.avg_p = nn.AdaptiveAvgPool2d(output_size=(1, 1))

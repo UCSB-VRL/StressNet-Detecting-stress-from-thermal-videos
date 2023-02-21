@@ -27,6 +27,7 @@ class preprocess_face:
 		#h5py read fails sometimes, issue posted in github of h5py
 		try:
 			image  = video_mat[idx,:,:]
+			cur_label = 1
 		except:
 			print("Failed to read frame")
 			cur_label=0
@@ -101,29 +102,29 @@ class non_linearity:
 		#print("np diff-sum-divide done..", frames_diff.shape)
 		#frames = block_reduce(frames, block_size=(1, 2, 2), func=np.max)
 		#print(frames_diff.shape, "pooling done..")
-		frames_diff = ndimage.gaussian_filter(frames_diff,sigma=(self.std_t,self.std_sh,self.std_sw))
+		#frames_diff = ndimage.gaussian_filter(frames_diff,sigma=(self.std_t,self.std_sh,self.std_sw))
 		print("gaussina blur done..")
-		frames_diff = self.act(frames_diff)
-		frames = self.act(frames)
+		#frames_diff = self.act(frames_diff)
+		#frames = self.act(frames)
 		#print("activation done")
 		'''
 		frames_diff = np.uint8((((frames_diff-frames_diff.min()))/frames_diff.max())*255)
 		frames = np.uint8((((frames-frames.min()))/frames.max())*255)
 		'''
-		frames_diff = (frames_diff-frames_diff.min())/frames_diff.max()
-		frames = (frames-frames.min())/frames.max()
+		#frames_diff = (frames_diff-frames_diff.min())/frames_diff.max()
+		#frames = (frames-frames.min())/frames.max()
 
 		#print(frames.shape, frames_diff.shape)
 		#creating a stack of images to have h,w,ch dimension
-		frames_out = []
-		for i in range(frames_diff.shape[0]):
-			if(i == 0):
-				frames_out.append(np.stack((frames[i], frames[i], frames_diff[i]), axis=0))
-			else:
-				frames_out.append(np.stack((frames_diff[i-1], frames[i], frames_diff[i]), axis=0))
-		frames_out = np.array(frames_out)
+		#frames_out = []
+		#for i in range(frames_diff.shape[0]):
+		#	if(i == 0):
+		#		frames_out.append(np.stack((frames[i], frames[i], frames_diff[i]), axis=0))
+		#	else:
+		#		frames_out.append(np.stack((frames_diff[i-1], frames[i], frames_diff[i]), axis=0))
+		#frames_out = np.array(frames_out)
 
-		return frames_out
+		return frames_diff
 
 
 if __name__ == '__main__':

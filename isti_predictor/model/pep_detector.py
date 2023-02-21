@@ -6,7 +6,7 @@ device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cp
 
 class pep_detector(nn.Module):
 
-	def __init__(self, in_channel, scale, num_bins=33):
+	def __init__(self, in_channel, scale, num_bins=1):
 		super(pep_detector, self).__init__()
 		self.representation_size = in_channel*scale
 		
