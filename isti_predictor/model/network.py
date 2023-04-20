@@ -12,6 +12,7 @@ import os
 import time
 import torchvision
 from torchvision import models
+import torch.nn.functional as F
 from model.pep_detector import pep_detector
 print("PyTorch Version:", torch.__version__)
 print("Torchvision Version:", torchvision.__version__)
@@ -24,7 +25,8 @@ class CNN(nn.Module):
 	def __init__(self):
 		super().__init__()
 		#loading blocks of ResNet
-		blocks     = list(resnet_model.children())[0:8]
+		resnet_model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+		blocks	   = list(resnet_model.children())[0:8]
 		self.convs = nn.Sequential(*blocks)	
 		self.avg_p = nn.AdaptiveAvgPool2d(output_size=(1, 1))
 
@@ -37,16 +39,35 @@ class CNN(nn.Module):
 		
 		return x
 
-class Merge_LSTM(nn.Module):
-	def __init__(self, in_dim, h_dim, num_l, frame_rate):
+class Classifier(nn.Module):
+	def __init__(self, pred_isti, scale=0.5):
 		super().__init__()
-		self.in_dim 	= in_dim
-		self.h_dim  	= h_dim
-		self.num_l  	= num_l
+		self.representation_size = int(pred_isti*scale)
+
+		#self.Attn = Attention(pred_isti)
+		self.fc1  = nn.Linear(pred_isti, self.representation_size)
+		self.fc2  = nn.Linear(self.representation_size, 1)
+		self.sig  = nn.Sigmoid()
+
+	def forward(self, x1):
+		x1 = torch.squeeze(x1)
+		x1 = F.relu(self.fc1(x1))
+		x1 = self.fc2(x1)
+		x1 = self.sig(x1)
+
+		return x1
+
+class Merge_LSTM(nn.Module):
+	def __init__(self, in_dim, h_dim, num_l, frame_rate, fps):
+		super().__init__()
+		self.in_dim		= in_dim
+		self.h_dim		= h_dim
+		self.num_l		= num_l
 		self.frame_rate = frame_rate
-		self.cnn    	  = CNN() #initialize CNN
+		self.cnn		  = CNN() #initialize CNN
 		self.lstm_layer   = nn.LSTM(self.in_dim, self.h_dim, self.num_l, batch_first=True)
 		self.detected_pep = pep_detector(30, 4) #initialize linear layers
+		self.stress		  = Classifier(fps)
 
 	def forward(self, x):
 		batch_size, timesteps, C, H, W = x.size()
@@ -56,8 +77,9 @@ class Merge_LSTM(nn.Module):
 		x_out, (h_o, c_o) = self.lstm_layer(x)
 		x_out = x_out[-1].view(batch_size, timesteps, -1).squeeze()
 		x_out = self.detected_pep(x_out)
+		x_out2 = self.stress(x_out)
 		
-		return x_out
+		return x_out, x_out2
 	
 if __name__ == '__main__':
 

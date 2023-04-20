@@ -22,7 +22,7 @@ class loss_pep():
 		loss_class = self.class_loss(pred, torch.tensor(gt_bins).to(device))
 		loss_reg   = self.reg_loss(pred, torch.tensor(labels).to(device))
 
-		loss_total = 0.6*loss_class + 0.4*loss_reg
+		loss_total = loss_class + 0.4*loss_reg
 
 		return loss_total
 

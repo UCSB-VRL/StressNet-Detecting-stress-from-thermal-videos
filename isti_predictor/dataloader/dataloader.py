@@ -9,6 +9,7 @@ import h5py
 import glob
 import scipy.io as sio
 import math
+from torchvision import transforms
 
 from utils.preprocess_face import preprocess_face, non_linearity
 
@@ -19,6 +20,13 @@ class VideoLoader(preprocess_face, non_linearity):
 		self.std_sw=4; self.std_sh=4; self.std_t=3
 		preprocess_face.__init__(self)
 		non_linearity.__init__(self, self.std_sw, self.std_sh, self.std_t)
+		'''
+		labels mean, std = 0.03598024, 0.20771082
+		'''
+
+	def standardize_frame(self, frame):
+		frame = (frame - 0.63839126)/(0.26499870)
+		return frame
 
 	def __call__(self, vid_fname):
 		print("reading video")
@@ -37,6 +45,7 @@ class VideoLoader(preprocess_face, non_linearity):
 		else:
 			for idx in range(video_mat.shape[0]-300):
 				fr, lb = self.face_tube(idx, video_mat)
+				fr = self.standardize_frame(fr)
 				self.frames.append(fr)
 				self.label_modifier.append(lb)
 			self.frames = np.array(self.frames)
@@ -46,12 +55,17 @@ class VideoLoader(preprocess_face, non_linearity):
 		return self.frames, self.label_modifier[:self.frames.shape[0]]
 
 class LabelLoader:
-	def __init__(self, root):
+	def __init__(self, root, labels_per_frame):
 		self.label_dir = root
+		self.labels_per_frame = labels_per_frame
 
 	def __call__(self,index):
 		print("loading isti signal")
 		self.isti_signal = np.load(self.label_dir[index])
+		#take derivate as we took for video frames too and normalize.
+		self.isti_signal -= self.isti_signal.min()
+		self.isti_signal /= self.isti_signal.max()
+		self.isti_signal = np.diff(self.isti_signal)
 
 		return self.isti_signal
 
@@ -85,35 +99,46 @@ class thermaldataset(tdata.Dataset):
 
 	def __init__(self, label, ir_video, sync_sig, phase):
 		'''isti label data path'''# sj160_se03_cv_LJ.mea.mat
-		self.label       = label
+		self.label		 = label
 		self.frame_rate  = 15
+		self.labels_per_frame = 1
 		self.label_files = os.listdir(self.label)
-		self.all_dir     = [os.path.join(self.label,a) for a in self.label_files]	
+		self.all_dir	 = [os.path.join(self.label,a) for a in self.label_files]	
 		#Init load label class
-		self.labelloader = LabelLoader(self.all_dir)
+		self.labelloader = LabelLoader(self.all_dir, self.labels_per_frame)
 		
 		'''ir_video data path'''
-		self.ir_video    = ir_video
+		self.ir_video	 = ir_video
 		self.videoloader = VideoLoader(self.ir_video)
 		
 		'''sync signal for ecg/ir_video'''
 		#you can skip this if your data is already in sync
-		self.sync_sig      = sync_sig
+		self.sync_sig	   = sync_sig
 		self.sync_sig_file = os.path.join(self.sync_sig, os.listdir(self.sync_sig)[0])
 		self.videcg_sync   = VidEcg_sync(self.sync_sig_file)
 		
 		'''train/validate/test phase'''
 		self.phase = phase
-	
+
+		'''transforms'''
+		self.transform_norm = transforms.Compose([
+        		transforms.ToTensor(),
+	            transforms.Normalize([0.6384], [0.2650])
+    	    ])
+
 	def __getitem__(self, index):
 		#label data
 		label_data = self.labelloader(index)
 		
 		#vid filename
 		label_fname = self.all_dir[index].split('/')[-1].split('_')
-		sub         = label_fname[0].split('sj')[-1]
-		ses         = label_fname[1].split('se')[-1].split('0')[-1]
-		vid_fname   = f'BOSS_-BOSS_{sub}_1_{ses}_{label_fname[2]}-*'
+		sub			= label_fname[0].split('sj')[-1]
+		ses			= label_fname[1].split('se')[-1].split('0')[-1]
+		vid_fname	= f'BOSS_-BOSS_{sub}_1_{ses}_{label_fname[2]}-*'
+		#stress label
+		stress_label = 0
+		if int(ses) == 3: stress_label = 0 #no stress condition
+		if int(ses) == 2: stress_label = 1 #stress condition
 		#IR video data
 		ir_video_data, cur_label = self.videoloader(vid_fname)
 		#In case the video read fails
@@ -126,28 +151,35 @@ class thermaldataset(tdata.Dataset):
 		#ir video & ecg signal sync
 		start_ts = self.videcg_sync(sub, ses, label_fname[2])
 		'''IR vid frame rate : 15hz'''
+		'''label fram rate is 120hz: i.e. 8 labels per video frame'''
 		if(start_ts > 0):
-			start_frame     = start_ts*15
+			start_frame		= start_ts*15
 			start_frame_int = math.ceil(start_frame)
 			
 			# compensate for round-off to integer value
-			start_isti = 1
+			start_isti = 0
 			print("start_frame", start_frame, start_isti)
 			
 			if(start_frame > ir_video_data.shape[0]*.75):
 				print("start_frame > ir_vid : skipping this file")
 				return -1
+			#if labels were recorded for shorter period of time
 			ir_video_data = ir_video_data[start_frame_int:,:,:]
-			cur_label	  = cur_label[start_frame_int:]
-			label_data	  = label_data[start_isti:(start_isti+ir_video_data.shape[0])]
+			read_length = min(ir_video_data.shape[0], label_data.shape[0])
+			ir_video_data = ir_video_data[:read_length,:,:]
+			cur_label	  = cur_label[start_frame_int:start_frame_int+read_length]
+			label_data	  = label_data[start_isti:ir_video_data.shape[0]]
 		else:
 			start_isti	  = math.ceil(abs(start_ts)*15)
 			if(start_isti > label_data.shape[0]*0.75):
 				print("start_ecg> label shape : skipping this file")
 				return -1
-			label_data	  = label_data[start_ecg:(start_ecg + ir_video_data.shape[0])]	
+			label_data	  = label_data[start_isti:]
+			read_length = min(ir_video_data.shape[0], label_data.shape[0])
+			ir_video_data = ir_video_data[:read_length]
+			cur_label	  = cur_label[:read_length]
+			label_data	  = label_data[:read_length]
 		
-		#import pdb; pdb.set_trace()
 		#making length of label_data = len(vid)*128
 		rem = label_data.shape[0]%1
 		label_pad_len = 0
@@ -157,6 +189,7 @@ class thermaldataset(tdata.Dataset):
 		label_data = np.pad(label_data, (0, int(label_pad_len)), 'symmetric').reshape((-1, 1))
 
 		#update corresponding label if person moves out of frame
+		cur_label = np.repeat(cur_label, self.labels_per_frame) #to make size equal to label length
 		cur_label = cur_label.reshape(-1,1)
 		#added if the person moves out of the frame then make label 0
 		try:
@@ -167,8 +200,11 @@ class thermaldataset(tdata.Dataset):
 		
 		#making data length multiple of 15
 		ir_video_data = ir_video_data[0:(ir_video_data.shape[0]//self.frame_rate)*self.frame_rate]
-		label_data	  = label_data[0:(ir_video_data.shape[0])]
-		data_sample = {'data': ir_video_data, 'label' : label_data}
+		#adding channel dimension: b_size, num_frames, h, w, ch
+		if len(ir_video_data.shape)<5:
+			ir_video_data = np.expand_dims(ir_video_data, axis=1)
+		label_data	  = label_data[0:(ir_video_data.shape[0]*self.labels_per_frame)]
+		data_sample = {'data': ir_video_data, 'label' : label_data, 's_label' : stress_label}
 		
 		return data_sample
 

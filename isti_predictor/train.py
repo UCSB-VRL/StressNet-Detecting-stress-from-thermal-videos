@@ -20,6 +20,7 @@ import torchvision
 from torchvision import models
 import torch.optim as optim
 from tqdm import tqdm
+import wandb
 
 from model.network import Merge_LSTM as net_model
 from dataloader.dataloader import thermaldataset
@@ -38,21 +39,22 @@ except OSError as exc:
 def main():
 	#Input arguments/training settings
 	parser = argparse.ArgumentParser()
-	parser.add_argument('-e','--epochs',type=int,required=False,default=50, help='Number_of_Epochs')
-	parser.add_argument('-lr','--learning_rate',type=float,required=False,default=0.01, \
+	parser.add_argument('-e','--epochs',type=int,required=False,default=300, help='Number_of_Epochs')
+	parser.add_argument('-lr','--learning_rate',type=float,required=False,default=0.0001, \
 						help='Learning_Rate')
 	parser.add_argument('-ba','--batch_size',type=int,required=False, default=1,help='Batch_Size')
+	parser.add_argument('-nw','--workers',type=int,required=False, default=0,help='number of workers')
 	parser.add_argument('-seed',type=int,required=False, default=5,help='random seed')
-	parser.add_argument('-data',type=str,required=False, default='/media/hdd1/satish/mat_files/', \
+	parser.add_argument('-data',type=str,required=False, default='../../data/mat_files/', \
 						help='data path')
-	parser.add_argument('-label',type=str,required=False, default='../data/normalized_pep_labels/', \
+	parser.add_argument('-label',type=str,required=False, default='../../data/normalized_label_data/', \
 						help='label path')
-	parser.add_argument('-sync',type=str,required=False, default='/media/hdd1/satish/sync_data/', \
+	parser.add_argument('-sync',type=str,required=False, default='../../data/sync_data/', \
 						help='ecg&vid sync')
 	parser.add_argument('-phase',type=str,required=False, default='train',help='train/test mode')
-	parser.add_argument('-split','--train_val_split', type=float, required=False, default=0.8, \
+	parser.add_argument('-split','--train_val_split', type=float, required=False, default=0.95,\
 						help='train/test mode')
-	parser.add_argument('-min_batch', '--frames_in_GPU',type=int,required=False, default=45, \
+	parser.add_argument('-min_batch', '--frames_in_GPU',type=int,required=False, default=135, \
 						help='number of frames per batch from the video to go in GPU')
 
 	#Parameters for existing model reload
@@ -61,6 +63,7 @@ def main():
 						help='existing hyper-parameters')
 	parser.add_argument('-cp','--checkpoint_path',type=str,required=False, \
 						default='../model_checkpoints_r50/', help='resume training')
+	parser.add_argument('-use_wandb', default=False, type=bool)
 
 	#parameters
 	args   = parser.parse_args()
@@ -74,6 +77,17 @@ def main():
 	split  = args.train_val_split
 	fps    = args.frames_in_GPU  #numbers of frames per batch
 	batch_size = args.batch_size
+	workers = args.workers
+
+	if args.use_wandb:
+		wandb.init(project="stressnet", entity="satish1901")
+
+		wandb.config = {
+			"learning_rate": l_rate,
+			"epochs" : epochs,
+			"frame_inGPU": fps,
+			"phase": phase
+		}
 
 	#Parameters for exisitng model reload
 	c_point_dir = args.checkpoint_path
@@ -93,11 +107,11 @@ def main():
 	#Initializing Network & LSTM dimension
 	frame_rate = 15; in_dim = frame_rate*2048; h_dim = frame_rate*30; num_l = 6
 	print("Initializing Network")
-	model  = net_model(in_dim, h_dim, num_l, frame_rate)
+	model  = net_model(in_dim, h_dim, num_l, frame_rate, fps)
 
 	#Freez parameters and layers training control
-	layers 		 = ('lstm_layer')
-	lstm_train   = []
+	layers		 = ('lstm_layer')
+	lstm_train	 = []
 	resnet_train = []
 	for n, p in model.named_parameters():
 		try:
@@ -113,7 +127,7 @@ def main():
 
 	#Optimizer
 	print("Initializing optimizer")
-	optimizer = optim.SGD([{"params": resnet_train, "lr": 0.01},
+	optimizer = optim.SGD([{"params": resnet_train, "lr": 0.00001},
 							{"params": lstm_train}], lr=l_rate)
 
 	#Network to GPU
@@ -121,8 +135,8 @@ def main():
 	
 	#Scheduler
 	print("Initializing scheduler")
-	lambda1   = lambda epoch : 1.0 if epoch<10 else (0.1 if epoch<20 else 0.001)
-	lambda2   = lambda epoch : 1.0 if epoch<20 else (0.1 if epoch<20 else 0.001)
+	lambda1   = lambda epoch : 1.0 if epoch<10 else (0.1 if epoch<20 else 0.1)
+	lambda2   = lambda epoch : 1.0 if epoch<20 else (0.1 if epoch<30 else 0.1)
 	scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=[lambda1, lambda2])
 		
 	#Dataloader
@@ -133,16 +147,16 @@ def main():
 	idxs = list(range(0, len(dataset)))
 	random.shuffle(idxs)
 	split_idx = int(len(idxs) * split)
-	trainIdxs = idxs[:split_idx]; valIdxs = idxs[split_idx:]
+	trainIdxs = idxs[:split_idx]; valIdxs = idxs[:split_idx//5]
 	'''create subsets'''
 	datasets['train'] = torch.utils.data.Subset(dataset, trainIdxs)
 	datasets['test']  = torch.utils.data.Subset(dataset, valIdxs)
 	print("number of training samples", len(datasets['train']))
 	#print(datasets['train'].dataset)
 	dataloader_tr  = torch.utils.data.DataLoader(datasets['train'], batch_size=batch_size, \
-												shuffle=True, num_workers=0)
+												shuffle=True, num_workers=workers)
 	dataloader_val = torch.utils.data.DataLoader(datasets['test'], batch_size=batch_size, \
-												shuffle=True, num_workers=0)
+												shuffle=True, num_workers=workers)
 	dataloader = {'train': dataloader_tr, 'test' : dataloader_val}
 
 	#Loss function
@@ -194,7 +208,7 @@ def main():
 				'sync'	 :sync,
 				'batch'  :batch_size}
 
-	training_loop(model, optimizer, scheduler, dataloader, loss, corr,  **params)
+	training_loop(args, model, optimizer, scheduler, dataloader, loss, corr,	**params)
 
 #Save Checkpoint
 def save_checkpoint(state, filename):
@@ -202,7 +216,7 @@ def save_checkpoint(state, filename):
 	torch.save(state, checkpoint_path)
 	return
 	
-def training_loop(model, optimizer, scheduler, dataloader, loss, corr, **params):
+def training_loop(args, model, optimizer, scheduler, dataloader, loss, corr, **params):
 	#training vars
 	best_train_loss  = 100
 	mean_train_loss  = 100
@@ -230,9 +244,11 @@ def training_loop(model, optimizer, scheduler, dataloader, loss, corr, **params)
 				running_loss = 0.0
 				running_acc  = 0.0
 				label_predictions = []
+				stress_predictions = []
 				try:
 					inputs = data['data'].cuda().float()
 					labels = data['label']
+					s_label = data['s_label']
 				except:
 					print("Data read error, number of frames too less to read")
 					continue
@@ -244,27 +260,39 @@ def training_loop(model, optimizer, scheduler, dataloader, loss, corr, **params)
 					#only for thermal dataset, as video are to large for GPU memory
 					#feeding params['fps'] frames at once
 					for idx in range(0, num_frames, params['fps']):
+						label_idx = idx*1
 						mini_input = inputs[:,idx:idx+params['fps'],:,:]
-						mini_label = labels[:,idx:idx+params['fps'],:]
-						
-						mini_out   = model(mini_input)
-						loss_total = loss(mini_out, mini_label)
+						mini_label = labels[:,label_idx:label_idx+(params['fps']),:]
+						#if section of video less then fps seconds, then drop the rest of the video
+						if params['fps'] > len(mini_label.squeeze()): continue
+						mini_out, out2   = model(mini_input)
+						loss_total = loss(mini_out, out2, mini_label, s_label)
 						if(math.isnan(loss_total.item())):
 							print("gradient explosion or vanished, updated learning rate")
-							import pdb; pdb.set_trace()
 						cur_loss   = loss_total
 						running_loss  = running_loss + loss_total.item()
 						cur_loss.backward()
 						print("Local loss: ", cur_loss.item())
 						
 						#training accuracy
-						pep_preds   = predict_pep(mini_out)
+						pep_preds	= predict_pep(mini_out)
 						correlation = corr.pearson_correlation(pep_preds, mini_label)
 						running_acc = running_acc + abs(correlation.item())
+						stress_predictions.append(out2)
 					
 					running_loss = running_loss
 					train_loss	 = train_loss +  running_loss
-					train_acc    = train_acc + running_acc
+					train_acc	 = train_acc + running_acc
+
+					#whole video stress prediction
+					stress_predictions = torch.cat(stress_predictions)
+					stress_predictions[stress_predictions>=0.5] = 1
+					stress_predictions[stress_predictions<0.5] = 0
+					if (torch.sum(stress_predictions)/len(stress_predictions))>=0.5:
+						print("STRESS DETECTED IN THE SUBJECT", s_label)
+					else:
+						print("NO-STRESS DETECTED", s_label)
+						
 					#save_prediction(labels.data, label_predictions, iteration)
 
 					if (iteration+1)%2 == 0:
@@ -273,11 +301,12 @@ def training_loop(model, optimizer, scheduler, dataloader, loss, corr, **params)
 						scheduler.step()
 
 				#mean training loss
+				print("iteration", iteration)
 				mean_train_loss = train_loss/(iteration+1)
 				mean_train_acc = train_acc/(iteration+1)
 
 				cur_training_vars = {'Training_loss': mean_train_loss,
-									 'Train_acc'    : mean_train_acc,
+									 'Train_acc'	: mean_train_acc,
 									 'Phase'		: params['phase'],
 									 'epoch'		: epoch+1,
 									 'iteration'	: iteration+1,
@@ -286,6 +315,9 @@ def training_loop(model, optimizer, scheduler, dataloader, loss, corr, **params)
 				best_training_vars= {'Best_train_loss': best_train_loss,
 									 'Min Loss epoch' : best_epoch_train
 									}
+
+				if args.use_wandb:
+					wandb.log(cur_training_vars)
 
 				print("Current Training Vars: ", cur_training_vars, "Best Training Vars: "\
 																	, best_training_vars)
@@ -309,6 +341,7 @@ def training_loop(model, optimizer, scheduler, dataloader, loss, corr, **params)
 			try:
 				inputs = data['data'].cuda().float()
 				labels = data['label']
+				s_label = data['s_label']
 			except:
 				print("Data read error, corrupted data")
 				continue
@@ -319,12 +352,12 @@ def training_loop(model, optimizer, scheduler, dataloader, loss, corr, **params)
 				for idx in range(0, num_frames, params['fps']):
 					mini_input = inputs[:,idx:idx+params['fps'],:,:]
 					mini_label = labels[:,idx:idx+params['fps'],:]
-					
+					if params['fps'] > len(mini_label.squeeze()): continue	
 					#output generation
-					mini_out   = model(mini_input)
+					mini_out, out2   = model(mini_input)
 					
 					#loss computation
-					loss_total = loss(mini_out, mini_label)
+					loss_total = loss(mini_out, out2, mini_label, s_label)
 					cur_loss   = loss_total.item()
 					running_loss = running_loss + cur_loss
 					print("Local loss : ", cur_loss)
@@ -337,7 +370,7 @@ def training_loop(model, optimizer, scheduler, dataloader, loss, corr, **params)
 
 				running_loss= running_loss
 				test_loss	= test_loss + running_loss
-				test_acc    = test_acc + running_acc
+				test_acc	= test_acc + running_acc
 
 			#mean test loss and acc
 			mean_test_loss = test_loss/(iteration+1)
@@ -352,6 +385,8 @@ def training_loop(model, optimizer, scheduler, dataloader, loss, corr, **params)
 			best_test_vars= {'Best_test_loss':best_test_loss,
 							 'Min Loss epoch':best_epoch_test
 							}
+			if args.use_wandb:
+				wandb.log(cur_test_vars)
 			print("Current Test Vars: ", cur_test_vars, "Best Test Vars: ", best_test_vars)
 
 		try:
@@ -380,7 +415,7 @@ def training_loop(model, optimizer, scheduler, dataloader, loss, corr, **params)
 				 "test"  : plot_test_loss,
 				 "test_acc" : plot_test_acc}
 
-	with open('../train_test_loss/loss_dump.json', 'w') as json_file:
+	with open('../loss_dump.json', 'w') as json_file:
 		json.dump(loss_dump, json_file)
 
 if __name__ == '__main__':
